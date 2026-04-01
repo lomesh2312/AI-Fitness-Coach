@@ -1,0 +1,39 @@
+# 🔥 Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 🔥 Virtual env
+venv/
+env/
+.venv/
+
+# 🔥 Model files
+*.pth
+*.pkl
+
+# 🔥 Data files (large)
+data/
+FINAL FOOD DATASET/
+
+# 🔥 Images (optional)
+*.png
+*.jpg
+*.jpeg
+
+# 🔥 System files
+.DS_Store
+
+# 🔥 Logs
+*.log
+
+# 🔥 Environment variables
+.env
+
+# 🔥 Jupyter
+.ipynb_checkpoints/
+
+# 🔥 Build
+dist/
+build/
