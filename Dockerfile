@@ -11,6 +11,13 @@ WORKDIR /app
 # Copy only the requirements first, to leverage Docker cache
 COPY requirements.txt .
 
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libgomp1 \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies (no-cache-dir reduces image size)
 RUN pip install --no-cache-dir -r requirements.txt
 
