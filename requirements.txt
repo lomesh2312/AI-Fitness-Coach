@@ -1,4 +1,4 @@
-torch
+# torch is installed separately in Dockerfile as CPU-only to save memory
 fastapi
 uvicorn
 pandas

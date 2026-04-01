@@ -5,6 +5,12 @@ from routes import fitness, heart
 app = FastAPI(title="AI Fitness Coach - Production Pro")
 
 import os
+import gc
+import torch
+
+# Optimize memory for 512MB limit
+torch.set_num_threads(1)
+gc.collect()
 
 frontend_url = os.environ.get("FRONTEND_URL", "https://ai-coach-lomesh-pro.netlify.app")
 app.add_middleware(
