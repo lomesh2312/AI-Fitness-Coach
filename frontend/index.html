@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Fitness Coach Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cream: #f5f0e8;
+            --warm-white: #fdf9f4;
+            --terracotta: #b5603a;
+            --terracotta-dark: #8c4829;
+            --terracotta-light: #c97d5a;
+            --text-dark: #2c1f14;
+            --text-mid: #6b4e37;
+            --text-light: #a07860;
+            --border: rgba(180, 140, 110, 0.2);
+            --card-bg: #fefcf9;
+            --safe: #6aab7b;
+            --warning: #d4a043;
+            --danger: #c24b3a;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Lato', sans-serif;
+            background-color: var(--cream);
+            color: var(--text-dark);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 40px 20px;
+        }
+
+        .container { max-width: 860px; width: 100%; }
+
+        .header-section {
+            text-align: center;
+            margin-bottom: 60px;
+            padding-bottom: 40px;
+            border-bottom: 1px solid var(--border);
+        }
+        .header-eyebrow {
+            font-family: 'Lato', sans-serif;
+            font-size: 0.75rem;
+            letter-spacing: 0.25rem;
+            text-transform: uppercase;
+            color: var(--terracotta);
+            margin-bottom: 16px;
+        }
+        h1 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 3.2rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            line-height: 1.1;
+            margin-bottom: 14px;
+        }
+        .subtitle {
+            font-size: 0.95rem;
+            color: var(--text-light);
+            letter-spacing: 0.05rem;
+            font-weight: 300;
+        }
+        .header-divider {
+            width: 40px;
+            height: 2px;
+            background: var(--terracotta);
+            margin: 20px auto;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 48px;
+            margin-bottom: 32px;
+            box-shadow: 0 4px 20px rgba(100, 60, 30, 0.06);
+        }
+
+        .card-title {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 32px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            letter-spacing: 0.05rem;
+        }
+        .card-title::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; }
+        .form-group { margin-bottom: 20px; }
+        label {
+            display: block;
+            font-size: 0.7rem;
+            font-weight: 700;
+            letter-spacing: 0.15rem;
+            text-transform: uppercase;
+            color: var(--text-mid);
+            margin-bottom: 8px;
+        }
+        input, select {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--warm-white);
+            border: 1px solid rgba(180, 140, 110, 0.35);
+            border-radius: 3px;
+            color: var(--text-dark);
+            font-family: 'Lato', sans-serif;
+            font-size: 0.95rem;
+            transition: border-color 0.25s;
+            appearance: none;
+        }
+        input:focus, select:focus { outline: none; border-color: var(--terracotta); }
+
+        .btn {
+            width: 100%;
+            padding: 15px 30px;
+            background: var(--terracotta);
+            border: none;
+            border-radius: 3px;
+            color: #fff;
+            font-family: 'Lato', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 700;
+            letter-spacing: 0.2rem;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background 0.25s, transform 0.15s;
+            margin-top: 8px;
+        }
+        .btn:hover { background: var(--terracotta-dark); transform: translateY(-1px); }
+        .btn.heart-btn { background: #9b4444; }
+        .btn.heart-btn:hover { background: #7c3333; }
+        .btn.heart-btn:hover { background: #7c3333; }
+        .hidden { display: none; }
+
+        #loading { text-align: center; padding: 60px 48px; }
+        .loader-ring {
+            display: inline-block;
+            width: 44px; height: 44px;
+            border: 3px solid var(--border);
+            border-top-color: var(--terracotta);
+            border-radius: 50%;
+            animation: spin 0.9s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #loading h3 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: var(--text-dark);
+            margin-bottom: 8px;
+        }
+        #loading p { color: var(--text-light); font-size: 0.9rem; }
+
+        .result-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 36px; }
+        .stat-card {
+            text-align: center;
+            padding: 28px 16px;
+            background: var(--warm-white);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+        }
+        .stat-val {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: var(--terracotta);
+            line-height: 1;
+            margin-bottom: 6px;
+        }
+        .stat-label {
+            font-size: 0.65rem;
+            letter-spacing: 0.15rem;
+            text-transform: uppercase;
+            color: var(--text-light);
+        }
+
+        .coach-section {
+            background: #faf5ee;
+            border: 1px solid rgba(181, 96, 58, 0.15);
+            border-left: 3px solid var(--terracotta);
+            border-radius: 3px;
+            padding: 24px 28px;
+            margin-bottom: 32px;
+            font-style: italic;
+            color: var(--text-mid);
+            font-size: 0.95rem;
+            line-height: 1.7;
+        }
+        .coach-label {
+            font-style: normal;
+            font-size: 0.65rem;
+            letter-spacing: 0.15rem;
+            text-transform: uppercase;
+            color: var(--terracotta);
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 36px; }
+        .plan-card {
+            background: var(--warm-white);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            padding: 28px;
+        }
+        .plan-header {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .tag-container { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; }
+        .tag {
+            background: rgba(181, 96, 58, 0.08);
+            border: 1px solid rgba(181, 96, 58, 0.2);
+            border-radius: 2px;
+            padding: 5px 12px;
+            font-size: 0.82rem;
+            color: var(--terracotta-dark);
+        }
+
+        .heart-result-box {
+            background: #fdf5f4;
+            border: 1px solid rgba(194, 75, 58, 0.2);
+            border-radius: 3px;
+            padding: 28px;
+            margin-top: 24px;
+        }
+        .heart-score-title {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: var(--text-dark);
+        }
+        .progress-track {
+            background: rgba(180, 140, 110, 0.2);
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        .progress-bar {
+            height: 100%;
+            background: var(--safe);
+            border-radius: 4px;
+            width: 0%;
+            transition: width 1.2s ease;
+        }
+
+        .warning-card {
+            background: #fdf0ee;
+            border: 1px solid rgba(194, 75, 58, 0.3);
+            border-left: 3px solid var(--danger);
+            border-radius: 3px;
+            padding: 20px 24px;
+            margin-top: 24px;
+            color: #8a2a1c;
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+        .warning-card p { font-weight: 400; color: var(--text-mid); margin-top: 6px; }
+
+        .section-sep { border: none; border-top: 1px solid var(--border); margin: 40px 0; }
+
+        .clr-safe    { color: var(--safe) !important; }
+        .clr-warning { color: var(--warning) !important; }
+        .clr-danger  { color: var(--danger) !important; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <!-- HEADER -->
+    <div class="header-section">
+        <div class="header-eyebrow">Personalized Intelligence</div>
+        <h1>AI Fitness Coach</h1>
+        <div class="header-divider"></div>
+        <p class="subtitle">Health Analysis &nbsp;·&nbsp; Heart Risk Intelligence &nbsp;·&nbsp; Personal Coaching</p>
+    </div>
+
+    <!-- ── STAGE 1: FORM ── -->
+    <div class="card" id="form-stage-1">
+        <div class="card-title">Your Profile</div>
+
+        <div class="grid">
+            <div class="form-group">
+                <label>Age</label>
+                <input type="number" id="age" value="25">
+            </div>
+            <div class="form-group">
+                <label>Gender</label>
+                <select id="gender">
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="form-group">
+                <label>Height (m)</label>
+                <input type="number" id="height" step="0.01" value="1.75">
+            </div>
+            <div class="form-group">
+                <label>Weight (kg)</label>
+                <input type="number" id="weight" step="0.1" value="70">
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="form-group">
+                <label>Diet Preference</label>
+                <select id="food">
+                    <option value="veg">Vegetarian</option>
+                    <option value="non-veg">Non-Vegetarian</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Primary Goal</label>
+                <select id="goal">
+                    <option value="weight loss">Weight Loss</option>
+                    <option value="muscle gain">Muscle Gain</option>
+                    <option value="maintain fitness" selected>Maintain Fitness</option>
+                </select>
+            </div>
+        </div>
+
+        <button onclick="analyzeFitness()" class="btn">Analyze My Health</button>
+    </div>
+
+    <!-- LOADING -->
+    <div id="loading" class="card hidden">
+        <div class="loader-ring"></div>
+        <h3>Analyzing your profile…</h3>
+        <p>Our AI coach is reviewing your metrics against health benchmarks.</p>
+    </div>
+
+    <!-- ── RESULTS ── -->
+    <div id="results" class="hidden">
+        <div class="card">
+            <div class="card-title">Your Assessment</div>
+
+            <div class="result-grid">
+                <div class="stat-card">
+                    <div class="stat-val" id="res-bmi">–</div>
+                    <div class="stat-label">BMI</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-val" id="res-level">–</div>
+                    <div class="stat-label">Fitness Level</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-val" id="res-risk">–</div>
+                    <div class="stat-label">Health Risk</div>
+                </div>
+            </div>
+
+            <div class="coach-section">
+                <div class="coach-label">Coach's Note</div>
+                <div id="res-summary">Your analysis will appear here.</div>
+            </div>
+
+            <div class="plan-grid">
+                <div class="plan-card">
+                    <div class="plan-header">🥗 Diet Plan</div>
+                    <div id="res-diet" style="font-size:0.9rem; color: var(--text-mid); line-height:1.7;"></div>
+                </div>
+                <div class="plan-card">
+                    <div class="plan-header">🧘 Yoga</div>
+                    <div class="tag-container" id="res-yoga"></div>
+                </div>
+                <div class="plan-card">
+                    <div class="plan-header">🏋️ Workout</div>
+                    <div class="tag-container" id="res-exercise"></div>
+                </div>
+            </div>
+
+            <button class="btn heart-btn" onclick="showStage2()">Check Heart Health →</button>
+        </div>
+
+        <!-- ── HEART HEALTH ── -->
+        <div class="card hidden" id="stage-2">
+            <div class="card-title">Heart Health Analysis</div>
+            <p style="color:var(--text-light); font-size:0.9rem; margin-bottom:28px;">Enter values from your latest checkup for a precise risk analysis.</p>
+
+            <div class="grid">
+                <div class="form-group">
+                    <label>Blood Pressure (mmHg)</label>
+                    <input type="number" id="bp" value="120">
+                </div>
+                <div class="form-group">
+                    <label>Total Cholesterol (mg/dL)</label>
+                    <input type="number" id="cholesterol" value="200">
+                </div>
+            </div>
+            <button onclick="checkHeart()" class="btn heart-btn">Predict Risk Probability</button>
+
+            <div id="clinical-warning" class="warning-card hidden" style="margin-top:24px;">
+                ⚠ Doctor Consultation Required
+                <p id="warning-msg"></p>
+            </div>
+
+            <div id="heart-result" class="heart-result-box hidden">
+                <div class="heart-score-title">Risk Category: <span id="risk-category">–</span></div>
+                <div class="progress-track">
+                    <div class="progress-bar" id="risk-progress-bar"></div>
+                </div>
+                <div style="font-size:0.9rem; color:var(--text-mid); line-height:1.7;" id="risk-explain"></div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    let userData = {};
+
+    function getRiskColor(risk) {
+        const r = risk.toLowerCase();
+        if (r.includes('high') || r.includes('poor') || r.includes('increased')) return 'var(--danger)';
+        if (r.includes('moderate') || r.includes('average') || r.includes('medium')) return 'var(--warning)';
+        return 'var(--safe)';
+    }
+
+    async function analyzeFitness() {
+        document.getElementById('form-stage-1').style.opacity = '0.4';
+        document.getElementById('form-stage-1').style.pointerEvents = 'none';
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('results').classList.add('hidden');
+
+        userData = {
+            age:             parseInt(document.getElementById('age').value),
+            height:          parseFloat(document.getElementById('height').value),
+            weight:          parseFloat(document.getElementById('weight').value),
+            gender:          document.getElementById('gender').value,
+            food_preference: document.getElementById('food').value,
+            goal:            document.getElementById('goal').value
+        };
+
+        try {
+            const res = await fetch('http://127.0.0.1:8000/api/fitness', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(userData)
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Validation Error');
+            }
+
+            const data = await res.json();
+            // ... (rest of the logic)
+
+            // Stats
+            const bmiEl   = document.getElementById('res-bmi');
+            const lvlEl   = document.getElementById('res-level');
+            const riskEl  = document.getElementById('res-risk');
+
+            bmiEl.innerText  = data.bmi;
+            bmiEl.style.color = getRiskColor(data.fitness.risk);
+            lvlEl.innerText  = data.fitness.level;
+            lvlEl.style.color = getRiskColor(data.fitness.level);
+            riskEl.innerText = data.fitness.risk;
+            riskEl.style.color = getRiskColor(data.fitness.risk);
+
+            document.getElementById('res-summary').innerText  = data.plan.summary;
+            document.getElementById('res-diet').innerText     = data.plan.diet;
+            document.getElementById('res-yoga').innerHTML     = data.plan.yoga.map(i  => `<li class="tag">${i}</li>`).join('');
+            document.getElementById('res-exercise').innerHTML = data.plan.exercise.map(i => `<li class="tag">${i}</li>`).join('');
+
+            setTimeout(() => {
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('results').classList.remove('hidden');
+            }, 900);
+
+        } catch (e) {
+            alert('Error: ' + e.message);
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('form-stage-1').style.opacity = '1';
+            document.getElementById('form-stage-1').style.pointerEvents = 'auto';
+        }
+    }
+
+    function showStage2() {
+        document.getElementById('stage-2').classList.remove('hidden');
+        document.querySelector('.heart-btn').style.display = 'none';
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }
+
+    async function checkHeart() {
+        const payload = {
+            ...userData,
+            bmi:            parseFloat(document.getElementById('res-bmi').innerText),
+            blood_pressure: parseFloat(document.getElementById('bp').value),
+            cholesterol:    parseFloat(document.getElementById('cholesterol').value)
+        };
+
+        try {
+            const res = await fetch('http://127.0.0.1:8000/api/heart', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Checkup Error');
+            }
+
+            const data = await res.json();
+            // ... (rest of the logic)
+
+            // Warning
+            const warn = document.getElementById('clinical-warning');
+            if (data.heart_risk.warning) {
+                warn.classList.remove('hidden');
+                document.getElementById('warning-msg').innerText = data.heart_risk.warning;
+            } else {
+                warn.classList.add('hidden');
+            }
+
+            // Results
+            document.getElementById('heart-result').classList.remove('hidden');
+            const catEl = document.getElementById('risk-category');
+            catEl.innerText    = data.heart_risk.category;
+            catEl.style.color  = getRiskColor(data.heart_risk.category);
+            document.getElementById('risk-explain').innerText = data.heart_risk.explanation;
+
+            const bar = document.getElementById('risk-progress-bar');
+            bar.style.width           = (data.heart_risk.probability * 100) + '%';
+            bar.style.backgroundColor = getRiskColor(data.heart_risk.category);
+
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+
+        } catch (e) {
+            alert('Error: ' + e.message);
+        }
+    }
+</script>
+</body>
+</html>
