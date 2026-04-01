@@ -433,6 +433,10 @@
 </div>
 
 <script>
+    const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+        ? 'http://127.0.0.1:8000' 
+        : 'https://ai-fitness-coach-2n5k.onrender.com'; // Placeholder Render URL for now
+        
     let userData = {};
 
     function getRiskColor(risk) {
@@ -458,7 +462,7 @@
         };
 
         try {
-            const res = await fetch('http://127.0.0.1:8000/api/fitness', {
+            const res = await fetch(`${API_BASE_URL}/api/fitness`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(userData)
@@ -517,7 +521,7 @@
         };
 
         try {
-            const res = await fetch('http://127.0.0.1:8000/api/heart', {
+            const res = await fetch(`${API_BASE_URL}/api/heart`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
