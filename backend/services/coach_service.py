@@ -1,310 +1,154 @@
 import os
 import re
-import gc
-import random
-import threading
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
+from rag.rag_system import rag_instance
 
-# ── LLM Initialization ──────────────────────────────────────────────────────
 llm = None
-_llm_lock = threading.Lock()
+if os.getenv("OPENAI_API_KEY"):
+    llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.1)
 
-def _get_llm():
-    global llm
-    if llm is not None:
-        return llm
-    with _llm_lock:
-        if llm is not None:
-            return llm
-        key = os.environ.get("OPENAI_API_KEY", "").strip()
-        if not key:
-            print("⚠️  [LLM] OPENAI_API_KEY not set — using rule-based fallback.")
-            return None
-        try:
-            llm = ChatOpenAI(
-                model="gpt-3.5-turbo",
-                temperature=0.7,
-                openai_api_key=key,
-                max_tokens=512,
-            )
-            print("✅ [LLM] ChatOpenAI initialized successfully.")
-            return llm
-        except Exception as e:
-            print(f"❌ [LLM] Initialization failed: {e}")
-            return None
+coach_prompt_template = """
+You are a Senior AI Fitness Coach. Your goal is to explain health results in a motivational and scientific way.
 
-# ── Prompt Template ──────────────────────────────────────────────────────────
-_COACH_PROMPT = """You are a Senior AI Fitness & Nutrition Coach. Be motivational, specific, and human.
-
-USER PROFILE:
-- BMI: {bmi} ({bmi_label})
+--- USER PROFILE ---
+- BMI: {bmi}
 - Fitness Level: {fitness_level}
 - Goal: {goal}
 - Food Preference: {food_pref}
-- Strategy: {strategy}
 
-SCIENTIFIC CONTEXT:
+--- SCIENTIFIC CONTEXT (RAG) ---
 {rag_context}
 
-RULES:
-- Diet: exactly 3 specific meals (no generic items like "chicken", say "Grilled Lemon Chicken with Quinoa")
-- Yoga: 2 poses with duration and benefit
-- Exercise: 2 exercises with sets/duration
-- Summary: 2-sentence motivational coach note using the user's actual goal and BMI
+--- INSTRUCTIONS ---
+Provide specific, actionable advice. Avoid generic terms.
+1. DIET: Suggest 3 specific meals. E.g., "Grilled Chicken with Quinoa" not just "Chicken".
+2. YOGA: 2 specific poses with duration/benefit.
+3. WORKOUT: 2 specific exercises (e.g., "30 min brisk walking daily").
+4. SUMMARY: A motivational 2-sentence coach note.
 
-FORMAT (strict):
-DIET: [meal1, meal2, meal3]
-YOGA: [pose1 (duration - benefit), pose2 (duration - benefit)]
-EXERCISE: [exercise1 (sets/duration), exercise2 (sets/duration)]
+Response Format:
+DIET: [items]
+YOGA: [items]
+EXERCISE: [items]
 SUMMARY: [text]
 """
 
-_prompt = PromptTemplate(
-    input_variables=["bmi", "bmi_label", "fitness_level", "food_pref", "goal", "strategy", "rag_context"],
-    template=_COACH_PROMPT
+prompt = PromptTemplate(
+    input_variables=["bmi", "fitness_level", "food_pref", "rag_context"],
+    template=coach_prompt_template
 )
-
-# ── Diverse Diet Banks ───────────────────────────────────────────────────────
-_DIETS = {
-    "veg": {
-        "underweight": [
-            "Paneer Paratha + Sweet Potato Mash", "Avocado Toast + Almond Butter",
-            "Chickpea Curry + Quinoa", "Energy Shake with Oats, Banana & Peanut Butter",
-            "Tofu Stir Fry + Brown Rice", "Rajma + Roti + Greek Yogurt"
-        ],
-        "loss": [
-            "Moong Dal Soup + Cucumber Salad", "Quinoa Tabbouleh + Roasted Chickpeas",
-            "Green Smoothie + Flaxseed Crackers", "Steamed Broccoli + Brown Rice + Lentils",
-            "Sprout Salad + Lemon Dressing", "Idli + Sambar + Coconut Chutney"
-        ],
-        "gain": [
-            "Soy Chunks + Brown Rice + Ghee", "Paneer Tikka + Sweet Potato",
-            "Dal Makhani + Roti + Curd", "Chickpea Stew + Whole Wheat Bread",
-            "Banana Protein Shake + Mixed Nuts", "Rajma Masala + Jeera Rice"
-        ],
-        "maintain": [
-            "Dal + Brown Rice + Papad", "Khichdi with Mixed Vegetables",
-            "Mixed Veg Sabzi + 2 Rotis", "Oats Upma + Boiled Egg (optional)",
-            "Palak Paneer + Jowar Roti", "Vegetable Poha + Coconut Water"
-        ],
-        "obese": [
-            "Methi Thepla + Low-fat Curd", "Cucumber Raita + Multigrain Roti",
-            "Stir Fried Vegetables + Millets", "Oat Bran Porridge + Berries",
-            "Beetroot Salad + Lemon Juice", "Vegetable Daliya + Buttermilk"
-        ],
-    },
-    "nonveg": {
-        "underweight": [
-            "Eggs & Bacon + Whole Wheat Toast", "Chicken Stew + Brown Rice",
-            "Tuna Sandwich on Multigrain Bread", "Beef Steak + Mashed Sweet Potato",
-            "Protein Shake + Boiled Eggs + Almonds", "Salmon + Quinoa + Steamed Broccoli"
-        ],
-        "loss": [
-            "Grilled Chicken Breast + Asparagus", "Baked Salmon + Steamed Spinach",
-            "Boiled Eggs + Mixed Green Salad", "Chicken Soup + Multigrain Crackers",
-            "Tuna Salad + Olive Oil Dressing", "Turkey Lettuce Wraps + Salsa"
-        ],
-        "gain": [
-            "Chicken Breast + Quinoa + Ghee", "Eggs & Oatmeal + Peanut Butter",
-            "Steak + Roasted Potatoes", "Turkey Slices + Brown Rice",
-            "Salmon + Avocado + Sweet Potato", "Mutton Curry + Roti + Curd"
-        ],
-        "maintain": [
-            "Chicken Curry + Rice", "Fish Tikka + Stir-Fried Veggies",
-            "Egg Curry + 2 Rotis", "Grilled Chicken Wrap + Greek Yogurt",
-            "Keema Paratha + Salad", "Prawn Stir Fry + Brown Rice"
-        ],
-        "obese": [
-            "Grilled Fish + Steamed Veggies", "Chicken Salad + Olive Oil",
-            "Boiled Eggs + Cucumber Slices", "Baked Chicken + Zucchini",
-            "Egg White Omelette + Spinach", "Steamed Fish + Brown Rice (small portion)"
-        ],
-    }
-}
-
-_YOGA_POOL = [
-    "Tadasana (Mountain Pose) — 2 min — improves posture and body awareness",
-    "Bhujangasana (Cobra Pose) — 30s × 3 — improves spinal flexibility",
-    "Virabhadrasana I (Warrior I) — 1 min each side — builds lower body strength",
-    "Balasana (Child Pose) — 3 min — reduces stress and lower back tension",
-    "Surya Namaskar (Sun Salutation) — 10 rounds — full-body activation",
-    "Trikonasana (Triangle Pose) — 1 min each side — stretches hips and spine",
-    "Setu Bandhasana (Bridge Pose) — 30s × 3 — strengthens glutes and back",
-    "Anulom Vilom (Alternate Breathing) — 5 min — reduces BP and anxiety",
-    "Paschimottanasana (Seated Forward Bend) — 1 min — stretches hamstrings",
-    "Vrikshasana (Tree Pose) — 1 min each side — improves balance and focus",
-]
-
-_WORKOUTS = {
-    "underweight": [
-        "Progressive Overload Weight Training — 4 sets of 8 reps",
-        "Dumbbell Bicep Curls + Shoulder Press — 3 sets of 10 reps",
-        "Resistance Band Pull-Aparts — 3 sets of 15 reps",
-        "Bodyweight Pullups + Pushups Circuit — 3 sets",
-    ],
-    "loss": [
-        "30 min Brisk Walking at 6 km/h daily",
-        "HIIT: 20 sec sprint + 40 sec rest × 10 rounds",
-        "Stair Climbing for 15 minutes",
-        "Cycling at moderate pace — 45 min",
-        "Jump Rope — 500 skips per session",
-    ],
-    "gain": [
-        "Heavy Compound Lifts (Squat/Deadlift/Bench) — 4 sets of 6 reps",
-        "Resistance Band Full-Body Circuit — 3 sets",
-        "Dumbbell Rows + Lunges — 3 sets of 8 reps",
-        "Progressive Push-up Challenge — 5 sets max reps",
-    ],
-    "maintain": [
-        "20 min Morning Jog at comfortable pace",
-        "Core Plank Hold — 3 × 60 seconds",
-        "Bodyweight Squats — 3 × 20 reps",
-        "Swimming for 30 minutes — moderate pace",
-        "Yoga Flow + Light Stretching — 30 min",
-    ],
-    "obese": [
-        "Low-impact Walking — 20 min, twice daily",
-        "Chair Squats — 3 sets of 10 reps",
-        "Seated Resistance Band Exercises — 3 sets",
-        "Water Aerobics or Swimming — 30 min",
-    ],
-}
-
-def _bmi_label(bmi):
-    if bmi < 18.5: return "Underweight"
-    if bmi < 25:   return "Normal weight"
-    if bmi < 30:   return "Overweight"
-    return "Obese"
-
-def _diet_key(bmi, goal):
-    goal_lower = goal.lower()
-    if bmi < 18.5:          return "underweight"
-    if bmi >= 30:           return "obese"
-    if "loss" in goal_lower: return "loss"
-    if "gain" in goal_lower: return "gain"
-    return "maintain"
-
-def _workout_key(bmi, goal):
-    goal_lower = goal.lower()
-    if bmi < 18.5:           return "underweight"
-    if bmi >= 30:            return "obese"
-    if "loss" in goal_lower: return "loss"
-    if "gain" in goal_lower: return "gain"
-    return "maintain"
-
-def _make_explanation(bmi, fitness_level, goal):
-    label = _bmi_label(bmi)
-    parts = [f"Your BMI is {round(bmi, 2)}, placing you in the **{label}** category."]
-    if bmi < 18.5:
-        parts.append("Being underweight means your body may lack key nutrients and muscle mass. Increasing caloric intake through nutritious, protein-rich foods is essential for healthy weight gain.")
-    elif bmi < 25:
-        parts.append("Your weight is in the healthy range. The focus should be on maintaining this balance through consistent exercise and a varied, nutritious diet.")
-    elif bmi < 30:
-        parts.append("Being overweight increases the risk of cardiovascular disease and type 2 diabetes. A moderate calorie deficit combined with daily physical activity will help bring your BMI into the healthy range.")
-    else:
-        parts.append("Obesity significantly increases health risks. Even a 5–10% reduction in body weight can dramatically improve blood pressure, blood sugar, and cholesterol levels.")
-    parts.append(f"Given your goal of **{goal}**, your personalised plan below is designed to target this specifically.")
-    return " ".join(parts)
 
 class CoachService:
     def get_coach_advice(self, bmi, fitness_level, food_pref, goal):
-        # Lazy-import rag to avoid circular import / startup crash
-        from rag.rag_system import rag_instance
+        goal_map = {
+            "weight loss": "focusing on a calorie deficit and high-intensity cardio",
+            "muscle gain": "prioritizing protein intake and progressive strength training",
+            "maintain fitness": "balanced nutrition and consistent moderate activity"
+        }
+        goal_context = goal_map.get(goal.lower(), "balanced health")
 
-        dk = _diet_key(bmi, goal)
-        wk = _workout_key(bmi, goal)
-        pref = "veg" if food_pref.lower() == "veg" else "nonveg"
-        label = _bmi_label(bmi)
+        bmi_reasoning = ""
+        if bmi < 18.5:
+            advice_type = "Muscle Gain"
+            bmi_reasoning = f"Your BMI is {round(bmi, 2)} (Underweight). Since your goal is {goal}, we recommend high-protein meals and weight lifting for healthy growth."
+        elif bmi < 25:
+            advice_type = "Dynamic Toning"
+            bmi_reasoning = f"Your BMI is {round(bmi, 2)} (Healthy). For your goal of {goal}, staying consistent with {goal_context} is key to long-term success."
+        else:
+            advice_type = "Fat Loss"
+            bmi_reasoning = f"Your BMI is {round(bmi, 2)} (Overweight). To achieve {goal}, focus on {goal_context} and increasing your daily step count to 10,000+."
 
-        query = f"goal={goal}, BMI={round(bmi,1)} ({label}), food={food_pref}, fitness={fitness_level}"
-        try:
-            rag_hints = rag_instance.retrieve(query, top_k=4)
-            print(f"📚 [RAG] Retrieved {len(rag_hints)} facts.")
-        except Exception as e:
-            print(f"⚠️  [RAG] retrieval failed: {e}")
-            rag_hints = []
-        rag_context = "\n".join([f"- {f}" for f in rag_hints]) if rag_hints else "No additional context available."
-
-        # ── Try LLM first ───────────────────────────────────────────────────
-        active_llm = _get_llm()
-        if active_llm:
+        query = f"User goal is {goal}, BMI {bmi}, fitness {fitness_level}, {food_pref}. Suggest 3 diet items and 2 workout plans."
+        rag_hints = rag_instance.retrieve(query, top_k=4)
+        rag_context = "\n".join([f"- {fact}" for fact in rag_hints])
+        
+        if llm:
             try:
-                strategy_map = {
-                    "underweight": "caloric surplus + strength training",
-                    "loss":        "caloric deficit + cardio",
-                    "gain":        "caloric surplus + resistance training",
-                    "maintain":    "balanced nutrition + moderate activity",
-                    "obese":       "low-impact activity + portion control",
-                }
-                formatted = _prompt.format(
+                custom_prompt = prompt.format(
                     bmi=round(bmi, 2),
-                    bmi_label=label,
                     fitness_level=fitness_level,
                     food_pref=food_pref,
-                    goal=goal,
-                    strategy=strategy_map.get(dk, "balanced approach"),
-                    rag_context=rag_context,
+                    rag_context=rag_context + f"\n- Specific Goal: {goal}\n- Advice Strategy: {advice_type}\n- Reasoning: {bmi_reasoning}"
                 )
-                # Use .invoke() — compatible with LangChain 0.1 and 0.2+
-                response = active_llm.invoke(formatted)
+                # CHANGE: .invoke() instead of .predict() to prevent LangChain 0.2 crash
+                response = llm.invoke(custom_prompt)
                 response_text = response.content if hasattr(response, "content") else str(response)
-                print(f"✅ [LLM] Response received ({len(response_text)} chars).")
                 parsed = self._parse_response(response_text)
-                parsed["explanation"] = _make_explanation(bmi, fitness_level, goal)
-                gc.collect()
+                parsed["summary"] = f"Goal: {goal.title()}. {bmi_reasoning} {parsed['summary']}"
                 return parsed
             except Exception as e:
-                print(f"❌ [LLM] Error during invoke: {e}")
+                print(f"LLM Error: {e}")
 
-        # ── Rule-based fallback ──────────────────────────────────────────────
-        print("🔄 [FALLBACK] Using rule-based response.")
-        return self._rule_based_fallback(bmi, pref, dk, wk, goal, fitness_level)
+        return self._rule_based_fallback(fitness_level, food_pref, bmi, rag_hints, goal)
 
     def _parse_response(self, text):
         sections = {"diet": "", "yoga": [], "exercise": [], "summary": ""}
-        patterns = {
-            "DIET":     ("diet",     False),
-            "YOGA":     ("yoga",     True),
-            "EXERCISE": ("exercise", True),
-            "SUMMARY":  ("summary",  False),
-        }
-        for key, (field, is_list) in patterns.items():
-            match = re.search(rf"{key}:\s*(.*?)(?=\n(?:DIET|YOGA|EXERCISE|SUMMARY):|$)", text, re.DOTALL | re.IGNORECASE)
+        for key in ["DIET", "YOGA", "EXERCISE", "SUMMARY"]:
+            match = re.search(f"{key}: (.*?)(?=\n[A-Z]+:|$)", text, re.DOTALL)
             if match:
-                content = match.group(1).strip().strip("[]")
-                if is_list:
-                    items = [i.strip() for i in re.split(r",(?![^(]*\))", content) if i.strip()]
-                    sections[field] = items if items else [content]
+                content = match.group(1).strip()
+                if key in ["YOGA", "EXERCISE"]:
+                    sections[key.lower()] = [item.strip() for item in content.replace("[", "").replace("]", "").split(",")]
                 else:
-                    sections[field] = content
+                    sections[key.lower()] = content
         return sections
 
-    def _rule_based_fallback(self, bmi, pref, dk, wk, goal, fitness_level):
-        diet_options = _DIETS[pref].get(dk, _DIETS[pref]["maintain"])
-        diet_items   = random.sample(diet_options, min(3, len(diet_options)))
-        diet         = "\n".join([f"• {item}" for item in diet_items])
+    def _rule_based_fallback(self, level, pref, bmi, facts, goal):
+        import random
+        is_veg = pref.lower() == "veg"
+        goal_lower = goal.lower()
+        veg_weight_loss = [
+            "Lentil Soup + Cucumber Salad", "Quinoa + Roasted Veggies", "Green Tea + Sprout Salad", "Brown Rice + Moong Dal"
+        ]
+        nonveg_weight_loss = [
+            "Grilled Chicken + Broccoli", "Baked Salmon + Asparagus", "Chicken Salad + Olive Oil", "Boiled Eggs + Spinach"
+        ]
+        veg_muscle = [
+            "Tofu Curd + Sweet Potato", "Soy Chunks + Brown Rice", "Paneer Tikka + Green Salad", "Chickpea Stew + Beans"
+        ]
+        nonveg_muscle = [
+            "Chicken Breast + Quinoa", "Steak + Roasted Potatoes", "Eggs + Oatmeal", "Turkey slices + Brown Rice"
+        ]
+        veg_maintain = [
+            "Dal + Brown Rice", "Khichdi with vegetables", "Mixed Veg Curry + Roti", "Oats + Fruit Bowl"
+        ]
+        nonveg_maintain = [
+            "Chicken Curry + Rice", "Fish Tikka + Veggies", "Egg Curry + Roti", "Grilled Chicken wrap"
+        ]
+        
+        veg_underweight = [
+            "Energy Shake + Nuts", "Paneer Paratha + Sweet Potato", "Chickpea Curry + Quinoa", "Avocado Toast + Almonds"
+        ]
+        nonveg_underweight = [
+            "Eggs & Bacon + Oatmeal", "Chicken Stew + Brown Rice", "Beef Steak + Mashed Potatoes", "Protein Shake + Tuna Wrap"
+        ]
+        
+        if bmi < 18.5:
+            options = veg_underweight if is_veg else nonveg_underweight
+            summary = "We need to focus on healthy growth. Ensure you eat energy-dense foods with a caloric surplus!"
+            workout = ["Progressive Strength Training", random.choice(["Pushups & Pullups", "Dumbbell exercises"])]
+        elif "loss" in goal_lower or bmi > 25:
+            options = veg_weight_loss if is_veg else nonveg_weight_loss
+            summary = "Let's focus on fat loss and cardiovascular health. Consistency is your superpower."
+            workout = ["30 min brisk walking daily", random.choice(["15 min HIIT session", "Stair climbing for 10 min"])]
+        elif "gain" in goal_lower:
+            options = veg_muscle if is_veg else nonveg_muscle
+            summary = "We need to focus on healthy growth. Ensure you eat in a caloric surplus with high protein!"
+            workout = ["Progressive Strength Training", random.choice(["Heavy Weightlifting", "Resistance Band exercises"])]
+        else:
+            options = veg_maintain if is_veg else nonveg_maintain
+            summary = "You have a solid foundation! Focus on refining your balance and maintaining this lifestyle."
+            workout = ["20 min morning Jogging", random.choice(["Bodyweight Squats (20 reps)", "Core Planks (3 sets)"])]
 
-        yoga_items   = random.sample(_YOGA_POOL, 2)
-        workout_pool = _WORKOUTS.get(wk, _WORKOUTS["maintain"])
-        workout      = random.sample(workout_pool, min(2, len(workout_pool)))
-
-        label = _bmi_label(bmi)
-        tone_map = {
-            "underweight": f"Your BMI of {round(bmi,1)} ({label}) means gaining healthy weight is the priority. Focus on calorie-dense, nutritious foods and progressive strength training.",
-            "loss":        f"At BMI {round(bmi,1)} ({label}), consistent cardio and a moderate calorie deficit will get you results. Small daily wins build big long-term changes.",
-            "gain":        f"To build muscle at BMI {round(bmi,1)}, eat in a caloric surplus and push heavier weights each week. Recovery and sleep are just as important as training.",
-            "maintain":    f"You're at a healthy BMI of {round(bmi,1)}. The goal now is consistency — keep moving, keep eating well, and focus on long-term habits.",
-            "obese":       f"Starting from a BMI of {round(bmi,1)}, every step matters. Low-impact activity and portion control will create safe, sustainable fat loss.",
-        }
-        coach_note = tone_map.get(dk, f"BMI {round(bmi,1)}: stay consistent with your nutrition and movement plan.")
+        diet_list = random.sample(options, min(3, len(options)))
+        diet = "\n".join([f"• {item}" for item in diet_list])
 
         return {
-            "diet":        diet,
-            "yoga":        yoga_items,
-            "exercise":    workout,
-            "summary":     f"🏋️ Coach says: {coach_note} Keep following this plan and track your progress weekly! 🚀",
-            "explanation": _make_explanation(bmi, fitness_level, goal),
+            "diet": diet,
+            "yoga": ["Surya Namaskar (10 rounds)", "Balasana (Child Pose)"],
+            "exercise": workout,
+            "summary": f"Coach says: {summary} Keep following this plan to see measurable results! 🚀"
         }
 
 coach_service = CoachService()

@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-
 class DiseaseModel(nn.Module):
     def __init__(self, input_size=5, hidden_size=16):
         super(DiseaseModel, self).__init__()

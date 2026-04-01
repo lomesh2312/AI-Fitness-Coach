@@ -4,19 +4,13 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 import pandas as pd
 import os
+from sklearn.metrics import accuracy_score, confusion_matrix
+import numpy as np
 
 PROCESSED_DATA_DIR = "/Users/luckysonkeshriya/Desktop/pytorch/AI_Fitness_Coach/data/processed"
 # Save directly to backend checkpoints so main.py can find them
 MODELS_DIR = "/Users/luckysonkeshriya/Desktop/pytorch/AI_Fitness_Coach/backend/models/checkpoints"
 os.makedirs(MODELS_DIR, exist_ok=True)
-
-# -----------------
-# MODEL 1: FITNESS
-# -----------------
-from sklearn.metrics import accuracy_score, confusion_matrix
-import numpy as np
-
-# ... (Previous imports)
 
 # -----------------
 # MODEL 1: FITNESS

@@ -1,193 +1,116 @@
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, validator
+from pydantic import BaseModel
+from utils.validation import validate_heart_input
 from services.prediction_service import prediction_service
 
 router = APIRouter()
 
 class HeartRequest(BaseModel):
-    age:            int
-    gender:         str
-    bmi:            float
-    blood_pressure: float
-    cholesterol:    float
-    goal:           str = "Maintain Fitness"
-
-    @validator("blood_pressure")
-    def bp_must_be_valid(cls, v):
-        if v <= 0:
-            raise ValueError("Blood pressure must be greater than 0")
-        if v > 300:
-            raise ValueError("Blood pressure exceeds realistic maximum (300 mmHg)")
-        return v
-
-    @validator("cholesterol")
-    def chol_must_be_valid(cls, v):
-        if v <= 0:
-            raise ValueError("Cholesterol must be greater than 0")
-        if v > 700:
-            raise ValueError("Cholesterol exceeds realistic maximum (700 mg/dL)")
-        return v
-
-    @validator("bmi")
-    def bmi_must_be_positive(cls, v):
-        if v <= 0 or v > 80:
-            raise ValueError("BMI must be between 1 and 80")
-        return v
-
-    @validator("age")
-    def age_must_be_valid(cls, v):
-        if v <= 0 or v > 120:
-            raise ValueError("Age must be between 1 and 120")
-        return v
-
-
-def _bp_status(bp: float) -> str:
-    if bp >= 140: return "high"
-    if bp >= 130: return "moderate"
-    return "safe"
-
-def _chol_status(chol: float) -> str:
-    if chol >= 240: return "high"
-    if chol >= 200: return "moderate"
-    return "safe"
-
-def _bmi_label(bmi: float) -> str:
-    if bmi < 18.5: return "underweight"
-    if bmi < 25:   return "a healthy weight"
-    if bmi < 30:   return "overweight"
-    return "obese"
-
-def _build_explanation(risk_desc: str, risk_pct: float, bp: float, chol: float,
-                        bpi: str, choli: str, age: int, bmi: float, goal: str,
-                        coach_tone: str) -> str:
-    """Build a full human-language explanation for the heart risk result."""
-
-    # ── Opening ──────────────────────────────────────────────────────────────
-    parts = [f"Your heart disease risk is **{risk_desc}** ({risk_pct}% probability)."]
-
-    if risk_desc == "Low":
-        parts.append(
-            f"Your Blood Pressure ({bp} mmHg) and Cholesterol ({chol} mg/dL) are both "
-            f"within safe ranges. This is excellent news — keep maintaining your healthy habits."
-        )
-    else:
-        # ── Cholesterol reasoning ─────────────────────────────────────────────
-        if choli == "high":
-            parts.append(
-                f"Your cholesterol is **{chol} mg/dL**, which is above the recommended limit of 200 mg/dL. "
-                f"High cholesterol causes fatty deposits (plaque) to build up inside your arteries, "
-                f"narrowing them and making it harder for your heart to pump blood efficiently."
-            )
-        elif choli == "moderate":
-            parts.append(
-                f"Your cholesterol ({chol} mg/dL) is borderline-high (200–239 mg/dL). "
-                f"If left unchecked, this can contribute to plaque buildup in the arteries over time."
-            )
-
-        # ── BP reasoning ──────────────────────────────────────────────────────
-        if bpi == "high":
-            parts.append(
-                f"Your Blood Pressure at **{bp} mmHg** is elevated (≥140 mmHg = Stage 2 Hypertension). "
-                f"High blood pressure puts constant extra stress on your heart and artery walls, "
-                f"significantly raising heart attack and stroke risk."
-            )
-        elif bpi == "moderate":
-            parts.append(
-                f"Your Blood Pressure ({bp} mmHg) is in the elevated range (130–139 mmHg). "
-                f"While not yet Stage 2 hypertension, this is a signal to reduce salt, stress, "
-                f"and increase aerobic exercise."
-            )
-
-        # ── BMI note ──────────────────────────────────────────────────────────
-        bmi_txt = _bmi_label(bmi)
-        parts.append(
-            f"Combined with your BMI of {round(bmi, 1)} ({bmi_txt}) at age {age}, "
-            f"these factors compound each other and raise your overall risk."
-        )
-
-        # ── Action ───────────────────────────────────────────────────────────
-        if risk_desc == "Critical":
-            parts.append("⚠️ **Immediate medical consultation is strongly advised.** Do not delay.")
-        elif risk_desc == "High":
-            parts.append(
-                "It is strongly recommended to consult a doctor and begin immediate lifestyle changes: "
-                "reduce sodium, increase fibre intake, and aim for 30 min of cardio 5 days per week."
-            )
-        elif risk_desc == "Moderate":
-            parts.append(
-                "Consider improving your diet (less processed food, more vegetables), "
-                "reducing salt intake, quitting smoking if applicable, and increasing physical activity."
-            )
-
-    # ── Personalised coach note ───────────────────────────────────────────────
-    parts.append(
-        f"\n\n🩺 **Coach's Note:** {coach_tone} "
-        f"Your goal of '{goal}' is a strong starting point — use it as your daily motivation."
-    )
-
-    return " ".join(parts)
-
+    age: int
+    gender: str
+    bmi: float
+    blood_pressure: float 
+    cholesterol: float
+    goal: str = "Maintain Fitness"
 
 @router.post("/heart")
 async def heart_health_check(req: HeartRequest):
     try:
+        if req.blood_pressure > 300 or req.cholesterol > 600:
+            return {
+                "heart_risk": {
+                    "probability": 1.0,
+                    "category": "High",
+                    "explanation": "🚨 EXTREME LEVELS DETECTED: Your vitals are outside realistic limits. Please seek immediate medical attention.",
+                    "warning": "⚠️ EMERGENCY: Extreme BP/Cholesterol readings."
+                }
+            }
+
+        validate_heart_input(req.blood_pressure, req.cholesterol)
+        
         gender_num = 1 if req.gender.lower() == "male" else 0
         prob_final, risk_final = prediction_service.predict_heart_risk(
             req.age, gender_num, req.bmi, req.blood_pressure, req.cholesterol
         )
-
-        risk_pct = round(prob_final * 100, 1)
-
-        # Enforce critical threshold override
+        
         if req.blood_pressure >= 180 or req.cholesterol >= 300:
             risk_final = "Critical"
-
-        bpi  = _bp_status(req.blood_pressure)
-        choli = _chol_status(req.cholesterol)
-
-        # ── Map risk to display strings ───────────────────────────────────────
+            
+        risk_pct = round(prob_final * 100, 1)
+        
+        bp_status = "safe"
+        if req.blood_pressure >= 140: bp_status = "high"
+        elif req.blood_pressure >= 130: bp_status = "moderate"
+        
+        chol_status = "safe"
+        if req.cholesterol >= 240: chol_status = "high"
+        elif req.cholesterol >= 200: chol_status = "moderate"
+        
         if risk_final == "Critical":
-            risk_desc   = "Critical"
-            coach_tone  = "This is serious — immediate medical intervention is needed. Please see a doctor today."
-            warning_msg = "🚨 CRITICAL: Emergency medical attention required"
+            risk_desc = "Critical"
+            coach_tone = "This is serious. Immediate medical intervention is required."
+            warning_msg = "⚠️ Immediate doctor consultation required"
         elif risk_final == "High":
-            risk_desc   = "High"
-            coach_tone  = "Your health indicators need prompt attention. Act now before this escalates."
-            warning_msg = "⚠️ High Risk: Medical attention strongly recommended"
+            risk_desc = "High"
+            coach_tone = "Your health indicators need immediate attention. It’s important to take action now."
+            warning_msg = "⚠️ Medical attention recommended"
         elif risk_final == "Medium":
-            risk_desc   = "Moderate"
-            coach_tone  = "You are in the warning zone. Small, consistent changes now will prevent big problems later."
-            warning_msg = "⚠️ Moderate Risk: Consider lifestyle changes and monitoring"
-        else:
-            risk_desc   = "Low"
-            coach_tone  = "Great job keeping your metrics in a healthy range!"
+            risk_desc = "Moderate"
+            coach_tone = "You’re close to a risk zone. Small changes can make a big difference."
             warning_msg = None
-
-        explanation = _build_explanation(
-            risk_desc, risk_pct,
-            req.blood_pressure, req.cholesterol,
-            bpi, choli,
-            req.age, req.bmi, req.goal, coach_tone
-        )
+        else:
+            risk_desc = "Low"
+            coach_tone = "Great job maintaining your health!"
+            warning_msg = None
+            
+        if risk_desc == "Low":
+            explanation = f"Your heart disease risk is Low ({risk_pct}% probability). Your Blood Pressure ({req.blood_pressure} mmHg) and Cholesterol ({req.cholesterol} mg/dL) are within safe limits. To maintain this, continue your balanced diet and regular physical activity."
+        else:
+            bp_reason = ""
+            chol_reason = ""
+            
+            if chol_status in ["high", "moderate"]:
+                chol_reason = f"Your cholesterol level is {req.cholesterol} mg/dL, which is higher than the recommended limit. High cholesterol can lead to fat buildup in your arteries, increasing the risk of heart disease."
+            if bp_status in ["high", "moderate"]:
+                if chol_status in ["high", "moderate"]:
+                    bp_reason = f"Additionally, your blood pressure is {req.blood_pressure} mmHg, which puts extra strain on your heart."
+                else:
+                    bp_reason = f"Your blood pressure is {req.blood_pressure} mmHg, which is higher than the recommended limit. High blood pressure puts extra strain on your heart and arteries, increasing cardiovascular risk."
+                    
+            vitals_reasoning = f"{chol_reason} {bp_reason}".strip()
+            
+            action = ""
+            if risk_desc == "Critical":
+                 action = "This puts you at serious risk of heart disease. Immediate medical consultation is strongly advised."
+            elif risk_desc == "High":
+                 action = "It is strongly recommended to consult a doctor and make immediate lifestyle changes."
+            elif risk_desc == "Moderate":
+                 action = "Consider improving your diet, reducing salt intake, and increasing physical activity."
+                 
+            explanation = f"Your heart disease risk is {risk_desc} ({risk_pct}% probability). {vitals_reasoning} {action}"
+        
+        if req.bmi < 18.5:
+             bmi_str = "an underweight BMI"
+        elif req.bmi > 25:
+             bmi_str = "an overweight BMI"
+        else:
+             bmi_str = "a healthy BMI"
+             
+        personalization = f"\n\n🩺 Coach's Note: {coach_tone} For your age ({req.age}) with {bmi_str}, focusing on your goal to '{req.goal}' will be key to managing your long-term heart health."
+        
+        explanation += personalization
 
         return {
             "heart_risk": {
                 "probability": prob_final,
-                "category":    risk_desc,
+                "category": risk_desc,
                 "explanation": explanation,
-                "warning":     warning_msg,
-                "metrics": {
-                    "bp_status":   bpi,
-                    "chol_status": choli,
-                    "bmi_label":   _bmi_label(req.bmi),
-                },
+                "warning": warning_msg
             }
         }
 
-    except ValueError as val_e:
-        raise HTTPException(status_code=422, detail=str(val_e))
-    except HTTPException:
-        raise
+    except HTTPException as http_e:
+        raise http_e
     except Exception as e:
-        print(f"❌ [HEART] Unhandled error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error. Please try again.")
+        print(f"Error handling request: {e}")
+        raise HTTPException(status_code=500, detail="Server temporarily unavailable. Please try again.")
