@@ -1,0 +1,9 @@
+torch
+fastapi
+uvicorn
+pandas
+scikit-learn
+faiss-cpu
+sentence-transformers
+openai
+langchain
