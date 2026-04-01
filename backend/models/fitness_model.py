@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+
 class FitnessModel(nn.Module):
     def __init__(self, input_size=4, hidden_size=16, num_classes=3):
         super(FitnessModel, self).__init__()
@@ -9,7 +10,7 @@ class FitnessModel(nn.Module):
         self.dropout = nn.Dropout(0.2)
         self.fc2 = nn.Linear(hidden_size, hidden_size)
         self.fc3 = nn.Linear(hidden_size, num_classes)
-        
+
     def forward(self, x):
         out = self.fc1(x)
         out = self.relu(out)

@@ -5,18 +5,21 @@ import threading
 import numpy as np
 
 # --- STEP 1: LAZY LOADING ---
-# We keep these as None at startup. 
+# We keep these as None at startup.
 # This prevents the 600MB+ memory spike when the server first boots.
 _faiss_module = None
 _st_model = None
 _model_lock = threading.Lock()
 
+
 def _get_faiss():
     global _faiss_module
     if _faiss_module is None:
         import faiss  # Import only when needed
+
         _faiss_module = faiss
     return _faiss_module
+
 
 def _get_model():
     global _st_model
@@ -25,10 +28,11 @@ def _get_model():
     with _model_lock:
         if _st_model is None:
             from sentence_transformers import SentenceTransformer
+
             # all-MiniLM-L6-v2 is small (22MB disk) but takes ~100MB RAM to run
             _st_model = SentenceTransformer("all-MiniLM-L6-v2")
             print("🧠 [RAG] SentenceTransformer model loaded into memory.")
-            gc.collect() # Force free unused memory
+            gc.collect()  # Force free unused memory
     return _st_model
 
 
@@ -56,18 +60,20 @@ class RAGSystem:
         self.documents = []
         self.index = None
         self._built = False
-        self._build_lock = threading.Lock() # Prevents 2 users from building index at same time
+        self._build_lock = (
+            threading.Lock()
+        )  # Prevents 2 users from building index at same time
 
     def _build_index_safe(self):
         """Builds the FAISS memory index safely, capping at 200 items."""
         if self._built:
             return
-            
+
         with self._build_lock:
             # Double-check inside lock
-            if self._built:   
+            if self._built:
                 return
-                
+
             if not os.path.exists(self.knowledge_path):
                 print(f"⚠️ [RAG] Knowledge base not found at {self.knowledge_path}")
                 self._built = True
@@ -79,37 +85,46 @@ class RAGSystem:
             # --- STEP 3: MEMORY CAPPING ---
             # Instead of loading 1000+ entries (which causes a 600MB spike),
             # we safely cap combined data to roughly 200 core facts.
-            priority_categories = ["fitness_rules", "diet_knowledge", "exercise_science", "food_nutrition"]
-            
+            priority_categories = [
+                "fitness_rules",
+                "diet_knowledge",
+                "exercise_science",
+                "food_nutrition",
+            ]
+
             for key in priority_categories:
                 if key in data:
                     entries = data[key]
                     # The food_nutrition array alone is massively huge. Cap it.
                     if key == "food_nutrition":
-                        entries = entries[:150] # 150 items max
+                        entries = entries[:150]  # 150 items max
                     else:
                         entries = entries[:25]  # 25 items max for others
-                        
+
                     self.documents.extend(entries)
 
-            print(f"📚 [RAG] Capped knowledge base to {len(self.documents)} total entries to save RAM.")
+            print(
+                f"📚 [RAG] Capped knowledge base to {len(self.documents)} total entries to save RAM."
+            )
 
             try:
                 # Encode ONLY the 200 entries (Takes ~2 seconds, uses minimal RAM)
                 model = _get_model()
                 embeddings = model.encode(self.documents, show_progress_bar=False)
-                
+
                 faiss_mod = _get_faiss()
                 dimension = embeddings.shape[1]
                 self.index = faiss_mod.IndexFlatL2(dimension)
                 self.index.add(np.array(embeddings, dtype="float32"))
                 print(f"✅ [RAG] FAISS Index built successfully.")
             except Exception as e:
-                print(f"❌ [RAG] FAISS build failed ({e}). System will survive using Keyword Fallback.")
+                print(
+                    f"❌ [RAG] FAISS build failed ({e}). System will survive using Keyword Fallback."
+                )
                 self.index = None
 
             self._built = True
-            gc.collect() # Clean up the encoding mess instantly
+            gc.collect()  # Clean up the encoding mess instantly
 
     def retrieve(self, query: str, top_k: int = 2) -> list:
         # 1. Trigger the safe build (only happens once on the very first API hit)
@@ -120,12 +135,18 @@ class RAGSystem:
             try:
                 model = _get_model()
                 query_embedding = model.encode([query])
-                distances, indices = self.index.search(np.array(query_embedding, dtype="float32"), top_k)
-                
-                results = [self.documents[i] for i in indices[0] if i < len(self.documents)]
+                distances, indices = self.index.search(
+                    np.array(query_embedding, dtype="float32"), top_k
+                )
+
+                results = [
+                    self.documents[i] for i in indices[0] if i < len(self.documents)
+                ]
                 return results
             except Exception as e:
-                print(f"⚠️ [RAG] FAISS search error: {e}. Switching to safe keyword mode.")
+                print(
+                    f"⚠️ [RAG] FAISS search error: {e}. Switching to safe keyword mode."
+                )
 
         # 3. If FAISS failed/OOM, use the zero-memory keyword search
         if self.documents:

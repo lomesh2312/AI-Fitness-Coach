@@ -10,8 +10,11 @@ def validate_fitness_input(age, weight, height):
     if weight > 500:
         raise ValueError("Weight seems unrealistic (> 500kg). Please check.")
 
+
 def validate_heart_input(bp, cholesterol):
     if not (50 <= bp <= 250):
-        raise ValueError("Resting Blood Pressure must be in a realistic range (50-250).")
+        raise ValueError(
+            "Resting Blood Pressure must be in a realistic range (50-250)."
+        )
     if not (80 <= cholesterol <= 600):
         raise ValueError("Cholesterol must be in a realistic range (80-600).")

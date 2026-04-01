@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+
+
 class DiseaseModel(nn.Module):
     def __init__(self, input_size=5, hidden_size=16):
         super(DiseaseModel, self).__init__()
@@ -8,7 +10,7 @@ class DiseaseModel(nn.Module):
         self.dropout = nn.Dropout(0.2)
         self.fc2 = nn.Linear(hidden_size, 1)
         self.sigmoid = nn.Sigmoid()
-        
+
     def forward(self, x):
         out = self.fc1(x)
         out = self.relu(out)

@@ -23,12 +23,15 @@ app.add_middleware(
 app.include_router(fitness.router, prefix="/api", tags=["Fitness Stage 1"])
 app.include_router(heart.router, prefix="/api", tags=["Heart Stage 2"])
 
+
 @app.get("/")
 async def root():
     return {"message": "AI Fitness Coach API is running!"}
 
+
 if __name__ == "__main__":
     import uvicorn
+
     # DEPLOYMENT FIX: Must dynamically bind to $PORT or 8000, and use host 0.0.0.0
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
