@@ -8,4 +8,7 @@ sentence-transformers
 openai
 langchain
 langchain-openai
+langchain-core
+langchain-community
+joblib
 python-multipart
