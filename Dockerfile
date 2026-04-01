@@ -17,5 +17,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code
 COPY . .
 
+# Change working directory so all relative imports work seamlessly
+WORKDIR /app/backend
+
 # Start uvicorn. Note it uses $PORT to dynamically grab Render's assigned port
-CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
