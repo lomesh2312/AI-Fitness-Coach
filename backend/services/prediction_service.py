@@ -16,24 +16,32 @@ class PredictionService:
         fit_path = os.path.join(CHECKPOINT_DIR, "fitness_model.pth")
         if os.path.exists(fit_path):
             print(f"Loading Fitness Model from {fit_path}")
-            self.fit_model.load_state_dict(torch.load(fit_path, weights_only=True))
+            self.fit_model.load_state_dict(
+                torch.load(fit_path, weights_only=True)
+            )
             self.fit_model.eval()
 
         self.dis_model = DiseaseModel(input_size=5)
         dis_path = os.path.join(CHECKPOINT_DIR, "disease_model.pth")
         if os.path.exists(dis_path):
             print(f"Loading Disease Model from {dis_path}")
-            self.dis_model.load_state_dict(torch.load(dis_path, weights_only=True))
+            self.dis_model.load_state_dict(
+                torch.load(dis_path, weights_only=True)
+            )
             self.dis_model.eval()
 
         self.fit_scaler = (
             joblib.load(os.path.join(CHECKPOINT_DIR, "fitness_scaler.pkl"))
-            if os.path.exists(os.path.join(CHECKPOINT_DIR, "fitness_scaler.pkl"))
+            if os.path.exists(
+                os.path.join(CHECKPOINT_DIR, "fitness_scaler.pkl")
+            )
             else None
         )
         self.dis_scaler = (
             joblib.load(os.path.join(CHECKPOINT_DIR, "disease_scaler.pkl"))
-            if os.path.exists(os.path.join(CHECKPOINT_DIR, "disease_scaler.pkl"))
+            if os.path.exists(
+                os.path.join(CHECKPOINT_DIR, "disease_scaler.pkl")
+            )
             else None
         )
         print("Prediction Service Ready ✅")
@@ -70,15 +78,24 @@ class PredictionService:
             risk_ml, prob, bmi, bp, cholesterol
         )
 
-        print(f"--- Heart Risk Debug ---")
+        print("--- Heart Risk Debug ---")
         print(f"Input: BP={bp}, Chol={cholesterol}, BMI={bmi}")
-        print(f"ML Prediction: {risk_ml} (Prob: {prob:.2f})")
-        print(f"Final Outcome: {risk_final} (Prob: {prob_final:.2f})")
-        print(f"------------------------")
+        print(f"ML Raw Prob : {prob:.3f}  ({risk_ml})")
+        print(f"Final Blended: {prob_final:.3f}  ({risk_final})")
+        print("------------------------")
 
         return float(prob_final), risk_final
 
     def _apply_rules_engine(self, risk_ml, prob_ml, bmi, bp, cholesterol):
+        """
+        Combine ML probability with clinical rules using WEIGHTED BLENDING.
+        Formula: final_prob = (0.60 × rule_prob) + (0.40 × ml_prob)
+
+        WHY BLENDING?
+        • Old approach: max(0.95, prob_ml) → forces 95% even for moderate cases.
+        • New approach: blends so ML still contributes 40% of the signal.
+        • Example: rule says 0.80, ML says 0.30 → final = 0.60×0.80 + 0.40×0.30 = 0.60
+        """
         bp_sev = "Low"
         if bp >= 140:
             bp_sev = "High"
@@ -91,24 +108,36 @@ class PredictionService:
         elif cholesterol >= 200:
             chol_sev = "Moderate"
 
-        risk_final = risk_ml
-        prob_final = prob_ml
-
+        # ── Define what the RULE ENGINE believes the probability should be ──
         if bp >= 180 or cholesterol >= 300:
-            risk_final = "High"
-            prob_final = max(0.95, prob_ml)
+            # Genuinely critical vitals → rule says ~90% (not 95% — realistic)
+            rule_risk = "High"
+            rule_prob = 0.90
         elif bp >= 130 and cholesterol >= 200:
-            risk_final = "High"
-            prob_final = max(0.80, prob_ml)
+            # Both elevated together → significant risk
+            rule_risk = "High"
+            rule_prob = 0.78
         elif bp_sev == "High" or chol_sev == "High":
-            risk_final = "High"
-            prob_final = max(0.75, prob_ml)
+            # One severely elevated metric
+            rule_risk = "High"
+            rule_prob = 0.72
         elif bp_sev == "Moderate" or chol_sev == "Moderate":
-            risk_final = "Medium"
-            prob_final = max(0.55, prob_ml)
-        elif bp_sev == "Low" and chol_sev == "Low":
-            risk_final = "Low"
-            prob_final = min(0.30, prob_ml)
+            # Borderline → medium risk
+            rule_risk = "Medium"
+            rule_prob = 0.50
+        else:
+            # Normal vitals
+            rule_risk = "Low"
+            rule_prob = 0.15
+
+        # ── WEIGHTED BLEND: 60% rule signal + 40% ML signal ───────────────
+        blended_prob = (0.60 * rule_prob) + (0.40 * prob_ml)
+
+        # Cap at 0.92 — never show 100%, that would be medically irresponsible
+        prob_final = min(round(blended_prob, 3), 0.92)
+
+        # Risk category comes from the rule engine (more clinically reliable)
+        risk_final = rule_risk
 
         return risk_final, prob_final
 

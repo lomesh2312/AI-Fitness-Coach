@@ -3,12 +3,12 @@ import gc
 import os
 
 # DEPLOYMENT FIX: Minimize memory footprint to fit in Render's 512MB
+from fastapi import FastAPI  # noqa: E402
+from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from routes import fitness, heart  # noqa: E402
+
 torch.set_num_threads(1)
 gc.collect()
-
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from routes import fitness, heart
 
 app = FastAPI(title="AI Fitness Coach - Production Pro")
 
@@ -32,6 +32,6 @@ async def root():
 if __name__ == "__main__":
     import uvicorn
 
-    # DEPLOYMENT FIX: Must dynamically bind to $PORT or 8000, and use host 0.0.0.0
+    # DEPLOYMENT FIX: Bind dynamically to $PORT or 8000
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)

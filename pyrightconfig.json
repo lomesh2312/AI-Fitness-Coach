@@ -1,0 +1,14 @@
+{
+  "pythonVersion": "3.13",
+  "pythonPlatform": "Darwin",
+  "pythonPath": "/opt/anaconda3/bin/python",
+  "include": [
+    "backend",
+    "src"
+  ],
+  "extraPaths": [
+    "./backend",
+    "./src"
+  ],
+  "typeCheckingMode": "off"
+}

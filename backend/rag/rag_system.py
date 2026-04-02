@@ -1,7 +1,10 @@
+from __future__ import annotations
+
 import json
 import os
 import gc
 import threading
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple
 import numpy as np
 
 # --- STEP 1: LAZY LOADING ---
@@ -37,13 +40,13 @@ def _get_model():
 
 
 # --- STEP 2: SAFE KEYWORD FALLBACK ---
-def _keyword_search(query: str, documents: list, top_k: int = 3) -> list:
+def _keyword_search(query: str, documents: List[str], top_k: int = 3) -> List[str]:
     """
     If FAISS ever crashes due to memory limits, we fall back to a simple,
     0-memory keyword match so the system NEVER crashes.
     """
     q_words = set(query.lower().split())
-    scored = []
+    scored: List[Tuple[int, str]] = []
     for doc in documents:
         doc_words = set(doc.lower().split())
         score = len(q_words & doc_words)
@@ -51,15 +54,15 @@ def _keyword_search(query: str, documents: list, top_k: int = 3) -> list:
             scored.append((score, doc))
     # Sort by highest matching words
     scored.sort(key=lambda x: x[0], reverse=True)
-    return [d for _, d in scored[:top_k]]
+    return [d for _, d in scored[:top_k]]  # type: ignore[misc]
 
 
 class RAGSystem:
     def __init__(self, knowledge_path: str):
         self.knowledge_path = knowledge_path
-        self.documents = []
-        self.index = None
-        self._built = False
+        self.documents: List[str] = []
+        self.index: Optional[Any] = None
+        self._built: bool = False
         self._build_lock = (
             threading.Lock()
         )  # Prevents 2 users from building index at same time
@@ -75,7 +78,10 @@ class RAGSystem:
                 return
 
             if not os.path.exists(self.knowledge_path):
-                print(f"⚠️ [RAG] Knowledge base not found at {self.knowledge_path}")
+                print(
+                    f"⚠️ [RAG] Knowledge base not found at "
+                    f"{self.knowledge_path}"
+                )
                 self._built = True
                 return
 
@@ -104,22 +110,27 @@ class RAGSystem:
                     self.documents.extend(entries)
 
             print(
-                f"📚 [RAG] Capped knowledge base to {len(self.documents)} total entries to save RAM."
+                f"📚 [RAG] Capped knowledge base to "
+                f"{len(self.documents)} total entries to save RAM."
             )
 
             try:
-                # Encode ONLY the 200 entries (Takes ~2 seconds, uses minimal RAM)
+                # Encode 200 entries (Takes ~2s, minimal RAM)
                 model = _get_model()
-                embeddings = model.encode(self.documents, show_progress_bar=False)
+                embeddings = model.encode(
+                    self.documents, show_progress_bar=False
+                )
 
                 faiss_mod = _get_faiss()
-                dimension = embeddings.shape[1]
-                self.index = faiss_mod.IndexFlatL2(dimension)
-                self.index.add(np.array(embeddings, dtype="float32"))
-                print(f"✅ [RAG] FAISS Index built successfully.")
+                dimension = int(embeddings.shape[1])  # type: ignore[index]
+                index = faiss_mod.IndexFlatL2(dimension)
+                index.add(np.array(embeddings, dtype="float32"))  # type: ignore[arg-type]
+                self.index = index
+                print("✅ [RAG] FAISS Index built successfully.")
             except Exception as e:
                 print(
-                    f"❌ [RAG] FAISS build failed ({e}). System will survive using Keyword Fallback."
+                    f"❌ [RAG] FAISS build failed ({e}). System will survive "
+                    f"using Keyword Fallback."
                 )
                 self.index = None
 
@@ -127,25 +138,29 @@ class RAGSystem:
             gc.collect()  # Clean up the encoding mess instantly
 
     def retrieve(self, query: str, top_k: int = 2) -> list:
-        # 1. Trigger the safe build (only happens once on the very first API hit)
+        # 1. Trigger the safe build (runs on first API hit)
         self._build_index_safe()
 
         # 2. Try the Smart FAISS search first
-        if self.index is not None:
+        faiss_index = self.index
+        if faiss_index is not None:
             try:
                 model = _get_model()
                 query_embedding = model.encode([query])
-                distances, indices = self.index.search(
+                distances, indices = faiss_index.search(  # type: ignore[attr-defined]
                     np.array(query_embedding, dtype="float32"), top_k
                 )
 
-                results = [
-                    self.documents[i] for i in indices[0] if i < len(self.documents)
+                results: List[str] = [
+                    self.documents[int(i)]
+                    for i in indices[0]  # type: ignore[index]
+                    if int(i) < len(self.documents)
                 ]
                 return results
             except Exception as e:
                 print(
-                    f"⚠️ [RAG] FAISS search error: {e}. Switching to safe keyword mode."
+                    f"⚠️ [RAG] FAISS search error: {e}. "
+                    f"Switching to safe keyword."
                 )
 
         # 3. If FAISS failed/OOM, use the zero-memory keyword search
@@ -153,7 +168,7 @@ class RAGSystem:
             return _keyword_search(query, self.documents, top_k)
 
         # 4. Ultimate absolute fallback (should never happen)
-        return ["Eating protein and staying hydrated is essential for fitness."]
+        return ["Eating protein and staying hydrated is good for fitness."]
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

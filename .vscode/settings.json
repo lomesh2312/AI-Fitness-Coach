@@ -1,1 +1,12 @@
-{"python.analysis.extraPaths": ["./backend", "./src"]}
+{
+    "python.analysis.extraPaths": [
+        "./backend",
+        "./src"
+    ],
+    "python.defaultInterpreterPath": "/opt/anaconda3/bin/python",
+    "python.analysis.pythonPath": "/opt/anaconda3/bin/python",
+    "python.analysis.useLibraryCodeForTypes": true,
+    "python.analysis.autoImportCompletions": true,
+    "python.analysis.diagnosticMode": "openFilesOnly",
+    "python.analysis.typeCheckingMode": "off"
+}

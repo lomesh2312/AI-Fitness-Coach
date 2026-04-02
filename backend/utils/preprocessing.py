@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
-import os
 
 
 def calculate_bmi(weight_lbs, height_inches):
